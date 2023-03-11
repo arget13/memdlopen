@@ -223,11 +223,15 @@ int patch_elf()
     }
 
     for(int i = 0; i < shnum; ++i)
+    {
+        if(dyn[i].d_tag == DT_SONAME)
+            break; // A library
         if((dyn[i].d_tag == DT_FLAGS_1) && (dyn[i].d_tag & DF_1_PIE))
         {
             dyn[i].d_tag &= ~DF_1_PIE;
             return ISPIE; // PIE but not a library
         }
+    }
     return ISPIE | ISLIB; // A library
 }
 
