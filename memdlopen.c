@@ -30,7 +30,7 @@
 #define ISPIE 1
 #define ISLIB 2
 
-uint8_t* lib_addr;
+void* lib_addr;
 size_t lib_fsize;
 uint64_t lib_base;
 
@@ -195,7 +195,7 @@ void sigill_handler(int s)
     return;
 }
 
-uint64_t search_section(void* elf, char* section)
+uint64_t search_section(void* elf, char* section, size_t* size)
 {
     Elf64_Ehdr* ehdr = elf;
     Elf64_Shdr* shdr = elf + ehdr->e_shoff;
@@ -205,16 +205,19 @@ uint64_t search_section(void* elf, char* section)
 
     for(int i = 0; i < shnum; ++i)
         if(!strcmp(&shstrtab[shdr[i].sh_name], section))
+        {
+            *size = shdr[i].sh_size;
             return shdr[i].sh_offset;
+        }
     return 0;
 }
 
 int patch_elf()
 {
-    int ret = ISPIE | ISLIB;
+    size_t num;
     Elf64_Ehdr* ehdr = (Elf64_Ehdr*) lib_addr;
-    Elf64_Dyn* dyn = (void*) lib_addr + search_section(lib_addr, ".dynamic");
-    uint16_t shnum = ehdr->e_shnum;
+    Elf64_Dyn* dyn = lib_addr + search_section(lib_addr, ".dynamic", &num);
+    num /= sizeof(*dyn);
 
     if(ehdr->e_type == ET_EXEC)
     {
@@ -222,13 +225,13 @@ int patch_elf()
         return 0; // Not PIE and therefore not a library
     }
 
-    for(int i = 0; i < shnum; ++i)
+    for(int i = 0; i < num; ++i)
     {
         if(dyn[i].d_tag == DT_SONAME)
             break; // A library
-        if((dyn[i].d_tag == DT_FLAGS_1) && (dyn[i].d_tag & DF_1_PIE))
+        if((dyn[i].d_tag == DT_FLAGS_1) && (dyn[i].d_un.d_val & DF_1_PIE))
         {
-            dyn[i].d_tag &= ~DF_1_PIE;
+            dyn[i].d_un.d_val &= ~DF_1_PIE;
             return ISPIE; // PIE but not a library
         }
     }
@@ -241,7 +244,7 @@ void read_elf()
     size_t r = 0;
 
     lib_addr = malloc(READ_SIZE);
-    while((r = read(0, &lib_addr[lib_fsize], READ_SIZE)) == READ_SIZE)
+    while((r = read(0, lib_addr + lib_fsize, READ_SIZE)) == READ_SIZE)
     {
         lib_fsize += r;
         lib_addr = realloc(lib_addr, lib_fsize + READ_SIZE);
@@ -252,7 +255,7 @@ void read_elf()
 void* ld_addr(size_t* len)
 {
     FILE* f = fopen("/proc/self/maps", "rb");
-    char buf[1024];
+    char buf[256];
     void* p1, * p2;
     while(fgets(buf, sizeof buf, f))
     {
@@ -281,7 +284,7 @@ int main(int argc, char** argv)
     int type;
 
     size_t len;
-    void* ld, *h;
+    void* ld, * h;
     read_elf();
     type = patch_elf();
 
@@ -301,7 +304,7 @@ int main(int argc, char** argv)
 
     if(type & ISLIB)
     {
-        ((void (*)(char*))dlsym(h, argv[1]))(argv[2]);
+        ((void (*)(char*)) dlsym(h, argv[1]))(argv[2]);
         return 0;
     }
 
