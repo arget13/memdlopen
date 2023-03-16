@@ -331,12 +331,10 @@ int main(int argc, char** argv)
                  "jmp *%1;"
                  : : "r"(sp), "r"(entry), "d"(fini));
     #elif defined(__aarch64__)
-    asm volatile("mov x1, sp;"
-                 "sub sp, sp, x1;"
-                 "add sp, sp, %0;"
+    asm volatile("mov sp, %0;"
                  "mov x0, %2;"
                  "br  %1;"
-                 : : "r"(sp), "r"(entry), "r"(fini) : "x0", "x1");
+                 : : "r"(sp), "r"(entry), "r"(fini) : "x0");
     #endif
 
     __builtin_unreachable();
