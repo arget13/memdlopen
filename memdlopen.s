@@ -2,8 +2,20 @@
 .global _start
 
 _start:
+    // Restore original bytes in read() through mem file
+        mov     x8, #0x3e
+        mov     x0, #3
+        mov     x1, #-0x10
+        mov     x2, #1     // SEEK_CUR
+        svc     #0         // lseek
+        mov     x8, #0x40
+        mov     x0, #3
+        adr     x1, data
+        add     x1, x1, #0x28
+        mov     x2, #0x10
+        svc     #0         // write
+
     // Read ELF in memory
-        // b       .
         mov     x8, #0xde // mmap
         mov     x2, #3    // RW
         mov     x3, #0x22 // MAP_ANON | MAP_PRIVATE
@@ -26,8 +38,7 @@ _start:
         mov     x9, #0xa
     memset:
         stp     xzr, xzr, [sp, #-0x10]!
-        sub     x9, x9, #1
-        cmp     x9, #0
+        subs    x9, x9, #1
         bne     memset
         adr     x9, sigill_handler
         str     x9, [sp]  // Now we have a struct sigaction in stack
@@ -45,12 +56,12 @@ _start:
         sub     x1, x10, x9
         mov     x2, #3 // RW
         mov     x0, x9
-        svc     #0
+        svc     #0 // mprotect
         bl      search_syscall
         sub     x1, x10, x9
         mov     x2, #5 // RX
         mov     x0, x9
-        svc     #0
+        svc     #0 // mprotect
 
     // Call dlopen(FAKE_LIB, RTLD_NOW | RTLD_GLOBAL)
         ldr     x2, [x19, #0x18] // libdl base address
@@ -60,8 +71,6 @@ _start:
         mov     x1, #0x102 // RLTD_NOW | RTLD_GLOBAL
         blr     x2
 
-        movn    x8, #0x1000 // non-existent syscall
-        udf     #1234 // breakpoint (kinda)
         adr     x19, data
         ldr     x19, [x19, #0x20] // stack_top
         ldr     x13, [x19, #-0x18] // lib_base
@@ -269,3 +278,4 @@ data    :
 // ld_start_addr : .dword 0
 // libdl_addr    : .dword 0
 // stack_top     : .dword 0
+// original      : .zero 16
