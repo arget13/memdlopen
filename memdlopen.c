@@ -34,11 +34,17 @@ void* lib_addr;
 size_t lib_fsize;
 uint64_t lib_base;
 
-void* search_syscall(void* start, void* stop)
+void search_syscall(void* start, void* stop)
 {
     for(uint8_t* ptr = start; (void*) ptr < (stop - sizeof(inst_t) - 1); ++ptr)
         if(*(inst_t*) ptr == SYSCALL_INST)
             *(inst_t*) ptr = ILL_INST;
+}
+void undo_search_syscall(void* start, void* stop)
+{
+    for(uint8_t* ptr = start; (void*) ptr < (stop - sizeof(inst_t) - 1); ++ptr)
+        if(*(inst_t*) ptr == ILL_INST)
+            *(inst_t*) ptr = SYSCALL_INST;
 }
 
 #if defined(__x86_64__)
@@ -325,6 +331,13 @@ int main(int argc, char** argv)
     *--sp = NULL;     // End of argv
     sp -= argc; memcpy(sp, argv, argc * 8);
     *(size_t*) --sp = argc;
+
+    // Undo all this mess before jumping
+    mprotect(ld, len, PROT_READ | PROT_WRITE);
+    undo_search_syscall(ld, ld + len);
+    mprotect(ld, len, PROT_READ | PROT_EXEC);
+    signal(SIGILL, SIG_DFL);
+    dup2(2, 0);
 
     #if defined(__x86_64__)
     asm volatile("mov %0, %%rsp;"
