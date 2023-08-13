@@ -1,3 +1,4 @@
+// Just a proof of concept to better understand the assembly
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
